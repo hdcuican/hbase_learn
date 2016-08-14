@@ -1,8 +1,27 @@
 package com.hbase;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.*;
-import org.apache.hadoop.hbase.client.*;
 import java.io.IOException;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.filter.RegexStringComparator;
+import org.apache.hadoop.hbase.filter.RowFilter;
 
 public class HbaseTest{
     public static Configuration configuration;
@@ -17,17 +36,22 @@ public class HbaseTest{
         //在Score表中插入一条数据，其行键为95001,sname为Mary（因为sname列族下没有子列所以第四个参数为空）
         //等价命令：put 'Score','95001','sname','Mary'
         insertRow("Score", "95001", "sname", "", "Mary");
+        insertRow("Score", "95002", "sname", "", "nick1111");
+        insertRow("Score", "95003", "sname", "", "nick2222");
+        insertRow("Score", "95004", "sname", "", "nick3333");
         //在Score表中插入一条数据，其行键为95001,course:Math为88（course为列族，Math为course下的子列）
         //等价命令：put 'Score','95001','score:Math','88'
         insertRow("Score", "95001", "course", "Math", "88");
+        //insertRow("Score", "95002", "course", "Math", "98");
         //在Score表中插入一条数据，其行键为95001,course:English为85（course为列族，English为course下的子列）
         //等价命令：put 'Score','95001','score:English','85'
         insertRow("Score", "95001", "course", "English", "85");
+       // insertRow("Score", "95002", "course", "English", "75");
  
         //查询Score表中，行键为95001，列族为course，列为Math的值
-        getData("Score", "95001", "course", "Math");
+        //getData("Score", "95001", "course", "Math");
         //查询Score表中，行键为95001，列族为sname的值（因为sname列族下没有子列所以第四个参数为空）
-        getData("Score", "95001", "sname", "");
+        //getData("Score", "95001", "sname", "");
         
         //1、删除Score表中指定列数据，其行键为95001,列族为course，列为Math
         //执行这句代码前请deleteRow方法的定义中，将删除指定列数据的代码取消注释注释，将删除制定列族的代码注释
@@ -44,6 +68,7 @@ public class HbaseTest{
         //等价命令：deleteall 'Score','95001'
         //deleteRow("Score", "95001", "", "");
  
+        pageFilter("Score");
         //删除Score表
         deleteTable("Score");
         
@@ -171,6 +196,79 @@ public class HbaseTest{
         Result result = table.get(get);
         showCell(result);
         table.close();
+    }
+    
+    /**
+     * 扫描数据
+     * @param tableName
+     */
+    public static void scan(String tableName) {
+    	Scan scan = new Scan();
+    	scan.setCaching(100);
+    	try{
+    		Table table = connection.getTable(TableName.valueOf(tableName));
+    		ResultScanner scanner =  table.getScanner(scan);
+    		for(Result result : scanner){
+    			showCell(result);
+    		}
+    	}catch(Exception e){
+    		e.printStackTrace();
+    	}
+    }
+    /**
+     * 过滤器查询
+     * @param tableName
+     */
+    public static void filter(String tableName){
+    	Scan scan = new Scan();
+    	scan.setCaching(100);
+    	/*RowFilter rowFilter = new RowFilter(CompareFilter.CompareOp.EQUAL,
+    			new BinaryComparator(Bytes.toBytes("95002")));*/
+    	RowFilter rowFilter = new RowFilter(CompareFilter.CompareOp.EQUAL,
+    			new RegexStringComparator("9500\\w+"));
+    	scan.setFilter(rowFilter);
+    	try{
+    		Table table = connection.getTable(TableName.valueOf(tableName));
+    		ResultScanner scanner =  table.getScanner(scan);
+    		for(Result result : scanner){
+    			showCell(result);
+    		}
+    	}catch(Exception e){
+    		e.printStackTrace();
+    	}
+    }
+    /**
+     * 分页过滤器查询
+     * @param tableName
+     */
+    public static void pageFilter(String tableName){
+    	PageFilter pageFilter = new PageFilter(4);
+    	byte[] lastRow = null;
+    	int pageCount = 0;
+    	try{
+    		Table table  = connection.getTable(TableName.valueOf(tableName));
+    		while(++pageCount > 0) {
+    			System.out.println("pageCount : " + pageCount + "#################");
+    			Scan scan = new Scan();
+    			scan.setFilter(pageFilter);
+    			if(lastRow != null) {
+    				scan.setStartRow(lastRow);
+    			}
+    			int count = 0;
+    			ResultScanner scanner = table.getScanner(scan);
+    			for(Result result : scanner){
+        			lastRow = result.getRow();
+        			if(++count > 3){
+        				break;
+        			}
+        			showCell(result);
+        		}
+    			if(count < 3)
+    				break;
+    		}
+    	}catch(Exception e){
+    		e.printStackTrace();
+    	}
     }
     /**
      * 格式化输出
